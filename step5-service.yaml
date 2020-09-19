@@ -1,0 +1,304 @@
+AWSTemplateFormatVersion: "2010-09-09"
+
+# This CloudFormation template - AWS keycloak infrastructure setup
+# ECS task definition, service definition, target group..
+
+Parameters:
+  Env:
+    Description: Select environment (prod or dev)
+    Type: String
+    Default: prod
+    AllowedValues: 
+      - prod
+      - dev
+    ConstraintDescription: must be a prod or dev
+
+  NetworkStackName:
+    Description: Name of the network stack with all infra resources 
+    Type: String
+    Default: network
+
+  LBStackName:
+    Description: Name of the load balancer stack 
+    Type: String
+    Default: lb
+
+  ECSCluster:
+    Description: Name of the ECS cluster stack 
+    Type: String
+    Default: ecs
+
+  DBStack:
+    Description: Name of the db stack 
+    Type: String
+    Default: db
+
+
+  ServiceName:
+    Type: String
+    Default: keycloak
+    Description: A human-readable name for the service.
+  
+  HealthCheckPath:
+    Type: String
+    Default: /
+    Description: Path to perform the healthcheck
+  
+  HealthCheckIntervalSeconds:
+    Type: Number
+    Default: 5
+    Description: Number of seconds to wait between each health check.
+  
+  ImageUrl:
+    Type: String
+    Default: quay.io/keycloak/keycloak:latest
+    Description: The url of a docker image that will handle incoming traffic.
+  
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: The port number the application inside the docker container 
+      is binding to.
+  
+  ContainerCpu:
+    Type: Number
+    Default: 1024
+    Description: How much CPU to give the container. 1024 is 1 CPU.
+  
+  ContainerMemory:
+    Type: Number
+    Default: 2048
+    Description: How much memory in megabytes to give the container.
+ 
+  Path:
+    Type: String
+    Default: "*"
+    Description: A path on the public load balancer that this service
+      should be connected to.
+  
+  DesiredCount:
+    Type: Number
+    Default: 2
+    Description: How many copies of the service task to run.
+
+  KEYCLOAKuser:
+    Type: String
+    Default: admin
+    Description: Initial admin user
+
+  KEYCLOAKuserENVname:
+    Type: String
+    Default: KEYCLOAK_USER
+    Description: ENV var name for user 
+
+  KEYCLOAKpasswd:
+    Type: String
+    Default: admin
+    Description: Initial admin user password
+
+  KEYCLOAKpasswdENVname:
+    Type: String
+    Default: KEYCLOAK_PASSWORD
+    Description: ENV var name for passwd 
+
+  DBVendorENVName:
+    Type: String
+    Default: DB_VENDOR
+    Description: SQL vendor - container env variable
+
+  DBVendorName:
+    Type: String
+    Default: postgres
+    Description: SQL vendor
+
+  DBDNSENVName:
+    Type: String
+    Default: DB_ADDR
+    Description: SQL DNS addr - container env variable
+
+  DBDNS:
+    Type: String
+    Description: SQL DNS addr
+    ConstraintDescription: Check output value from db stack
+
+  DBUserENVName:
+    Type: String
+    Default: DB_USER
+    Description: SQL DB user  - container env variable
+    ConstraintDescription: Check output value from db stack
+
+  DBUser:
+    Type: String
+    Default: ''
+    Description: SQL DB username
+    ConstraintDescription: Check output value from db stack
+
+  DBPasswdENVName:
+    Type: String
+    Default: DB_PASSWORD
+    Description: SQL DB user passwd - container env variable
+    ConstraintDescription: Check output value from db stack
+
+  DBPasswd:
+    Type: String
+    Default: ''
+    Description: SQL DB user passwd 
+    ConstraintDescription: Check output value from db stack
+
+  DBInstanceENVName:
+    Type: String
+    Default: DB_DATABASE
+    Description: SQL DB instance - container env variable
+    ConstraintDescription: Check output value from db stack
+
+  DBInstance:
+    Type: String
+    Default: ''
+    Description: SQL DB instance name 
+    ConstraintDescription: Check output value from db stack
+
+  DBPortENVName:
+    Type: String
+    Default: DB_PORT
+    Description: SQL DB instance port - container env variable
+    ConstraintDescription: Check output value from db stack
+
+  DBPort:
+    Type: Number
+    Default: 5432
+    Description: SQL DB instance port 
+    ConstraintDescription: Check output value from db stack
+
+  JDBCparamENVName:
+    Type: String
+    Default: JDBC_PARAMS
+    Description: SQL DB parameter - container env variable
+
+  JDBCparam:
+    Type: String
+    Default: "useSSL=false"
+    Description: SQL DB parameter
+
+
+Resources:
+
+  CloudWatchLogsGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Ref ServiceName
+      RetentionInDays: 365
+
+  TargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: !Ref HealthCheckIntervalSeconds
+      HealthCheckPath: !Ref HealthCheckPath
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 3
+      HealthyThresholdCount: 2
+      TargetType: ip
+      Name: !Join ['-', [!Ref "AWS::StackName", !Ref "ServiceName", !Ref "Env", "tggroup" ]]
+      Port: !Ref ContainerPort
+      Protocol: HTTP
+      UnhealthyThresholdCount: 2
+      VpcId:
+        Fn::ImportValue:
+          Fn::Sub: "${NetworkStackName}-VPCid"
+      Tags:
+        - Key: Name
+          Value: !Join ['_', [!Ref "AWS::StackName", !Ref "Env", "targetgroup" ]]
+  
+  LoadBalancerRule:
+    Type: AWS::ElasticLoadBalancingV2::ListenerRule
+    Properties:
+      Actions:
+        - TargetGroupArn: !Ref TargetGroup
+          Type: forward
+      Conditions:
+        - Field: path-pattern
+          Values: [!Ref 'Path']
+      ListenerArn:
+        Fn::ImportValue:
+          Fn::Sub: "${LBStackName}-PubLBListener"
+      Priority: 1
+
+  TaskDefinition:
+    Type: AWS::ECS::TaskDefinition
+    Properties:
+      Family: !Ref ServiceName
+      Cpu: !Ref ContainerCpu
+      Memory: !Ref ContainerMemory
+      NetworkMode: awsvpc
+      RequiresCompatibilities:
+        - FARGATE
+      ExecutionRoleArn:
+        Fn::ImportValue:
+          Fn::Sub: "${ECSCluster}-ECSTaskExecutionRole"
+      ContainerDefinitions:
+        - Name: !Ref ServiceName
+          Cpu: !Ref ContainerCpu
+          Memory: !Ref ContainerMemory
+          Image: !Ref ImageUrl
+          PortMappings:
+            - containerPort: !Ref ContainerPort
+          Environment:
+            - Name: !Ref KEYCLOAKuserENVname
+              Value: !Ref KEYCLOAKuser
+            - Name: !Ref KEYCLOAKpasswdENVname
+              Value: !Ref KEYCLOAKpasswd
+            - Name: !Ref DBVendorENVName
+              Value: !Ref DBVendorName
+            - Name: !Ref DBUserENVName
+              Value: !Ref DBUser
+            - Name: !Ref DBDNSENVName
+              Value: !Ref DBDNS
+            - Name: !Ref DBPasswdENVName
+              Value: !Ref DBPasswd
+            - Name: !Ref DBInstanceENVName
+              Value: !Ref DBInstance
+            - Name: !Ref DBPortENVName
+              Value: !Ref DBPort
+            - Name: !Ref JDBCparamENVName
+              Value: !Ref JDBCparam
+          LogConfiguration:
+            LogDriver: awslogs
+            Options:
+              awslogs-group: !Ref CloudWatchLogsGroup
+              awslogs-region: !Ref AWS::Region
+              awslogs-stream-prefix: !Ref ServiceName
+      Tags:
+        - Key: Name
+          Value: !Join ['_', [!Ref "AWS::StackName", !Ref "ServiceName", !Ref "Env", "taskdefinition" ]]
+
+  Service:
+    Type: AWS::ECS::Service
+    DependsOn: LoadBalancerRule
+    Properties:
+      ServiceName: !Join ['_', [!Ref "AWS::StackName", !Ref "ServiceName", !Ref "Env", "servicedefinition" ]]
+      Cluster:
+        Fn::ImportValue:
+          Fn::Sub: "${ECSCluster}-ECSCluster"
+      LaunchType: FARGATE
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 50
+      DesiredCount: !Ref DesiredCount
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups:
+            - Fn::ImportValue:
+                Fn::Sub: "${ECSCluster}-ECSSecurityGroup"
+          Subnets:
+            - Fn::ImportValue:
+                Fn::Sub: "${NetworkStackName}-PubASubnetID"
+            - Fn::ImportValue:
+                Fn::Sub: "${NetworkStackName}-PubBSubnetID"
+      TaskDefinition: !Ref TaskDefinition
+      LoadBalancers:
+        - ContainerName: !Ref ServiceName
+          ContainerPort: !Ref ContainerPort
+          TargetGroupArn: !Ref TargetGroup
+      Tags:
+        - Key: Name
+          Value: !Join ['_', [!Ref "AWS::StackName", !Ref "ServiceName", !Ref "Env" ]]
