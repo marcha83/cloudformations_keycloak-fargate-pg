@@ -18,6 +18,12 @@ Parameters:
     Type: String
     Default: network
 
+  CertificateARN:
+    Default: ''
+    Description: ARN of certificate
+    Type: String
+
+
 
 Resources:
   PubLBSecurityGroup:
@@ -30,7 +36,13 @@ Resources:
           Fn::Sub: "${NetworkStackName}-VPCid"
       SecurityGroupIngress:
         - CidrIp: 0.0.0.0/0
-          IpProtocol: -1
+          IpProtocol: tcp
+          FromPort: 443
+          ToPort: 443
+        - CidrIp: 0.0.0.0/0
+          IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
       Tags:
         - Key: Name
           Value: !Join ['_', [!Ref "AWS::StackName", !Ref "Env"]]
@@ -76,9 +88,29 @@ Resources:
     DependsOn:
       - PubLB
     Properties:
+        LoadBalancerArn: !Ref PubLB
+        DefaultActions:
+          - Type: forward
+            TargetGroupArn: !Ref DummyTargetGroupPublic
+        Port: 443
+        Protocol: HTTPS
+        Certificates:
+          - CertificateArn: !Ref CertificateARN
+
+  PubLBHttpRedirect:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    DependsOn:
+      - PubLB
+    Properties:
       DefaultActions:
-        - TargetGroupArn: !Ref 'DummyTargetGroupPublic'
-          Type: 'forward'
+        - RedirectConfig:
+            Host: "#{host}"
+            Path: "/#{path}"
+            Port: 443
+            Protocol: "HTTPS"
+            Query: "#{query}"
+            StatusCode: HTTP_301
+          Type: redirect
       LoadBalancerArn: !Ref 'PubLB'
       Port: 80
       Protocol: HTTP

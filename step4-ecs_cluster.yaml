@@ -23,6 +23,17 @@ Parameters:
     Type: String
     Default: lb
 
+  ContainerPort:
+    Type: Number
+    Default: 8080
+    Description: The port number the application inside the docker container 
+      is binding to.
+
+  TCPPINGPort:
+    Type: Number
+    Default: 7600
+    Description: The port number used for TCPPING discovery
+
 
 Resources:
   ECSCluster:
@@ -51,6 +62,9 @@ Resources:
       Description: Ingress from the public ALB
       GroupId: !Ref ECSSecurityGroup
       IpProtocol: -1
+      IpProtocol: tcp
+      FromPort: !Ref ContainerPort
+      ToPort: !Ref ContainerPort
       SourceSecurityGroupId:
         Fn::ImportValue:
           Fn::Sub: "${LBStackName}-PubLBSecurityGroup"
@@ -61,6 +75,9 @@ Resources:
       Description: Ingress from other containers in the same security group
       GroupId: !Ref ECSSecurityGroup
       IpProtocol: -1
+      IpProtocol: tcp
+      FromPort: !Ref TCPPINGPort
+      ToPort: !Ref TCPPINGPort
       SourceSecurityGroupId: !Ref ECSSecurityGroup
 
 #Roles

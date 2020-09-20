@@ -46,12 +46,12 @@ Parameters:
   
   HealthCheckIntervalSeconds:
     Type: Number
-    Default: 5
+    Default: 80
     Description: Number of seconds to wait between each health check.
   
   ImageUrl:
     Type: String
-    Default: quay.io/keycloak/keycloak:latest
+    Default: jboss/keycloak:latest
     Description: The url of a docker image that will handle incoming traffic.
   
   ContainerPort:
@@ -59,6 +59,11 @@ Parameters:
     Default: 8080
     Description: The port number the application inside the docker container 
       is binding to.
+
+  TCPPINGPort:
+    Type: Number
+    Default: 7600
+    Description: The port number used for TCPPING discovery
   
   ContainerCpu:
     Type: Number
@@ -100,6 +105,16 @@ Parameters:
     Type: String
     Default: KEYCLOAK_PASSWORD
     Description: ENV var name for passwd 
+
+  KEYCLOAKloglevelENVname:
+    Type: String
+    Default: KEYCLOAK_LOGLEVEL
+    Description: ENV var name for KEYCLOAK_LOGLEVEL
+
+  KEYCLOAKloglevel:
+    Type: String
+    Default: INFO
+    Description: ENV var for KEYCLOAK_LOGLEVEL
 
   DBVendorENVName:
     Type: String
@@ -194,13 +209,22 @@ Resources:
       HealthCheckIntervalSeconds: !Ref HealthCheckIntervalSeconds
       HealthCheckPath: !Ref HealthCheckPath
       HealthCheckProtocol: HTTP
-      HealthCheckTimeoutSeconds: 3
-      HealthyThresholdCount: 2
+      HealthCheckTimeoutSeconds: 10
+      HealthyThresholdCount: 5
       TargetType: ip
       Name: !Join ['-', [!Ref "AWS::StackName", !Ref "ServiceName", !Ref "Env", "tggroup" ]]
       Port: !Ref ContainerPort
       Protocol: HTTP
-      UnhealthyThresholdCount: 2
+      UnhealthyThresholdCount: 5
+      TargetGroupAttributes:
+        - Key: deregistration_delay.timeout_seconds
+          Value: 15
+        - Key: stickiness.enabled
+          Value: true
+        - Key: stickiness.type
+          Value: lb_cookie
+        - Key: stickiness.lb_cookie.duration_seconds
+          Value: 43200
       VpcId:
         Fn::ImportValue:
           Fn::Sub: "${NetworkStackName}-VPCid"
@@ -236,16 +260,17 @@ Resources:
           Fn::Sub: "${ECSCluster}-ECSTaskExecutionRole"
       ContainerDefinitions:
         - Name: !Ref ServiceName
-          Cpu: !Ref ContainerCpu
-          Memory: !Ref ContainerMemory
           Image: !Ref ImageUrl
           PortMappings:
             - containerPort: !Ref ContainerPort
+            - containerPort: !Ref TCPPINGPort
           Environment:
             - Name: !Ref KEYCLOAKuserENVname
               Value: !Ref KEYCLOAKuser
             - Name: !Ref KEYCLOAKpasswdENVname
               Value: !Ref KEYCLOAKpasswd
+            - Name: !Ref KEYCLOAKloglevelENVname
+              Value: !Ref KEYCLOAKloglevel              
             - Name: !Ref DBVendorENVName
               Value: !Ref DBVendorName
             - Name: !Ref DBUserENVName
@@ -260,6 +285,8 @@ Resources:
               Value: !Ref DBPort
             - Name: !Ref JDBCparamENVName
               Value: !Ref JDBCparam
+            - Name: PROXY_ADDRESS_FORWARDING
+              Value: true
           LogConfiguration:
             LogDriver: awslogs
             Options:
