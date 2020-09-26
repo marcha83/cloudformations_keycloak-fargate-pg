@@ -1,6 +1,13 @@
 # This repo covers CloudFormations templates to install and configure keycloak service with postgreSQL db on AWS cloud using AWS resources (VPC, subnets, LB, ECS-fargate, postgreSQL db..)  
 
 <br/><br/>
+
+## Disclaimer
+
+This is only for testing purpose with mainly focus on CloudFormation infrastructure concept templates and less on content of keycloak container  
+
+<br/><br/>
+
 ## Infrastructure diagram
 
 ![infrastructure-overview](images/infrastructure_diagram.jpg)
@@ -14,7 +21,7 @@
 <br/><br/>
 ## Usage/Steps
 
-**Step 1**: Create stack (recommended name because of referencing: network) by uploading '**`step1-network.yaml`**' file
+**Step 1**: Create stack (recommended name because of referencing: **network**) by uploading '**`step1-network.yaml`**' file
 
 It will create resources:
 
@@ -25,7 +32,7 @@ It will create resources:
 -	NAT gw with Elastic IP for private subnet internet gateway
 -	Outputs for cross-stack reference
 
-**Step 2**: Create stack (recommended name because of referencing: db) by uploading '**`step2-db.yaml`**' file
+**Step 2**: Create stack (recommended name because of referencing: **db**) by uploading '**`step2-db.yaml`**' file
 
 It will create resources:
 
@@ -34,18 +41,18 @@ It will create resources:
 -	DB subnet group – creates subnet group from private subnets
 -	Outputs for cross-stack reference and access data which will be needed in **step 5**
 
-**Step 3**: Create stack (recommended name because of referencing: lb) by uploading '**`step3-lb.yaml`**' file
+**Step 3**: Create stack (recommended name because of referencing: **lb**) by uploading '**`step3-lb.yaml`**' file
 
 It will create resources:
 
 -	Public LB security group for access to public LB
--	Public HTTPS LB -> need pre-created certificate ARN (prerequisite) 
+-	Public HTTPS LB -> needs pre-created certificate ARN (prerequisite) 
 -	Dummy target group – it's need and we still don't have created real targets (provided in **step 5**)
 -	Public listener
 -	Public redirect (http to https) listener
 -	Outputs for cross-stack reference
 
-**Step 4**: Create stack (recommended name because of referencing: ecs) by uploading '**`step4-ecs_cluster.yaml`**' file
+**Step 4**: Create stack (recommended name because of referencing: **ecs**) by uploading '**`step4-ecs_cluster.yaml`**' file
 
 It will create resources:
 
@@ -55,7 +62,7 @@ It will create resources:
 -	IAM role (ECSTaskExecutionRole) – allows Docker containers to create logs
 -	Outputs for cross-stack reference
 
-**Step 5**: Create stack (recommended name because of referencing: service) by uploading '**`step5-service.yaml`**' file -> pay attention to empty parameters which need to be filled out with output access data (stack db – **step 2**)
+**Step 5**: Create stack (recommended name because of referencing: **service**) by uploading '**`step5-service.yaml`**' file -> pay attention to empty parameters which need to be filled out with output access data (stack db – **step 2**)
 
 It will create resources:
 
